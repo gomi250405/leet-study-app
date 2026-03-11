@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 // ─────────────────────────────────────────────
 // CONSTANTS
@@ -40,7 +40,7 @@ const LEET_DATA = {
     }
   ],
   strategies: [
-    { id: "s1", title: "시간 관리", icon: "⏱", desc: "언어이해 35문항 75분 / 추리논증 40문항 100분. 문항당 평균 2~2.5분.", color: "#818CF8" },
+    { id: "s1", title: "시간 관리", icon: "⏱", desc: "언어이해 30문항 70분 / 추리논증 40문항 125분. 언어이해 문항당 약 2분 20초, 추리논증 문항당 약 3분 8초.", color: "#818CF8" },
     { id: "s2", title: "오답 노트", icon: "📝", desc: "틀린 이유 분류: 독해 실수 / 논리 오류 / 시간 부족. 패턴 파악이 핵심.", color: "#F472B6" },
     { id: "s3", title: "기출 분석", icon: "🎯", desc: "최근 5개년 기출 반복. 출제 패턴·난이도 트렌드 파악 필수.", color: "#34D399" },
     { id: "s4", title: "모의고사", icon: "📊", desc: "실전처럼 시간 재고 풀기. 월 2회 이상. 점수보다 분석에 집중.", color: "#FB923C" },
@@ -64,7 +64,7 @@ const SEED_QUESTIONS = {
     { id: "rq4", type: "퍼즐추리", difficulty: 5, passage: `A, B, C, D, E 다섯 명이 원형 테이블에 앉는다.\n• A의 바로 오른쪽은 B이다.\n• C와 D는 인접하지 않는다.\n• E는 A와 마주 보지 않는다.\n• B의 바로 오른쪽은 C가 아니다.`, question: "가능한 배치는? (시계 방향 순서)", options: ["A-B-D-E-C","A-B-E-C-D","A-B-C-D-E","A-B-D-C-E","A-B-E-D-C"], answer: 0, explanation: "A-B 고정(조건1). B 오른쪽은 C 불가(조건4)→D 또는 E. C와 D 비인접(조건3). A-B-D-E-C: C-D 비인접✓, E-A 인접(마주보기 아님)✓ → ①이 유일하게 모든 조건 충족." },
   ],
   strategy: [
-    { id: "sq1", type: "시간전략", difficulty: 1, passage: null, question: "언어이해 35문항 75분일 때 문항당 평균 허용 시간은?", options: ["약 1분","약 2분 8초","약 3분","약 2분 30초","약 1분 30초"], answer: 1, explanation: "75÷35≈2.14분=약 2분 8초입니다." },
+    { id: "sq1", type: "시간전략", difficulty: 1, passage: null, question: "언어이해 30문항 70분일 때 문항당 평균 허용 시간은?", options: ["약 1분 30초","약 2분 20초","약 3분","약 2분 50초","약 1분 50초"], answer: 1, explanation: "70분 ÷ 30문항 ≈ 2.33분 = 약 2분 20초입니다. 추리논증은 125분 ÷ 40문항 = 약 3분 8초예요." },
     { id: "sq2", type: "오답분석", difficulty: 2, passage: null, question: "오답 노트 활용법으로 가장 적절한 것은?", options: ["틀린 문제를 그대로 베껴 쓴다.","틀린 이유를 독해 실수/논리 오류/시간 부족으로 분류해 패턴을 찾는다.","정답만 표시하고 해설은 읽지 않는다.","오답은 다시 풀지 않는다.","틀린 수만 날짜별로 기록한다."], answer: 1, explanation: "이유 분류와 패턴 파악이 핵심입니다. ②" },
     { id: "sq3", type: "기출분석", difficulty: 3, passage: null, question: "기출 분석 시 가장 먼저 해야 할 것은?", options: ["가장 어려운 문제만 반복 풀기","최근 5개년 출제 패턴·난이도 트렌드 파악","시간 재지 않고 처음부터 끝까지 풀기","정답률 높은 쉬운 문제만 풀기","해설서를 처음부터 읽기"], answer: 1, explanation: "출제 트렌드 파악이 학습 방향 설정의 첫 단계입니다. ②" },
     { id: "sq4", type: "모의고사", difficulty: 4, passage: null, question: "다음 중 LEET 고득점자들의 공통 학습 전략으로 가장 거리가 먼 것은?", options: ["오답 원인을 유형별로 분류하여 약점을 체계적으로 보완한다.","실전과 동일한 환경에서 시간을 재고 모의고사를 푼다.","점수가 낮게 나온 회차는 분석 없이 넘어가고 새 문제에 집중한다.","기출 지문을 반복 독해하여 출제자의 의도와 문항 구조를 파악한다.","틀린 문제를 2주 뒤 다시 풀어 장기 기억으로 전환한다."], answer: 2, explanation: "점수가 낮을수록 분석이 더 중요합니다. ③처럼 분석 없이 넘어가는 것은 고득점 전략과 정반대입니다." },
@@ -124,16 +124,9 @@ const PROMPTS = {
 };
 
 async function generateQuestion(tab, difficulty) {
-  const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("API 키가 설정되지 않았습니다. .env 파일 또는 Vercel 환경변수를 확인하세요.");
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
@@ -272,12 +265,13 @@ export default function LEETMap() {
 
   // Quiz state
   const [quizTab, setQuizTab] = useState("lang");
-  const [questions, setQuestions] = useState({ lang: [...SEED_QUESTIONS.lang], reason: [...SEED_QUESTIONS.reason], strategy: [...SEED_QUESTIONS.strategy] });
+  const [questions, setQuestions] = useState({ lang: [], reason: [], strategy: [] });
   const [quizIdx, setQuizIdx] = useState({ lang: 0, reason: 0, strategy: 0 });
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [sessionStats, setSessionStats] = useState({ correct: 0, wrong: 0, total: 0 });
   const [answeredSet, setAnsweredSet] = useState(new Set());
+  const [autoLoaded, setAutoLoaded] = useState({ lang: false, reason: false, strategy: false });
 
   const section = LEET_DATA.sections.find(s => s.id === activeSection);
   const setMastery = (id, val) => setMasteries(p => ({ ...p, [id]: val }));
@@ -290,6 +284,14 @@ export default function LEETMap() {
   const curQIdx = quizIdx[quizTab];
   const curQ = curQList[curQIdx];
   const quizColor = QUIZ_TABS.find(t => t.id === quizTab)?.color || "#2DD4BF";
+
+  // 퀴즈 탭 열릴 때 문제 없으면 자동 생성
+  useEffect(() => {
+    if (view === "quiz" && !autoLoaded[quizTab] && curQList.length === 0 && !isGenerating) {
+      setAutoLoaded(p => ({ ...p, [quizTab]: true }));
+      handleGenerateAI(quizTab);
+    }
+  }, [view, quizTab]);
 
   // Adaptive difficulty: increase as user answers correctly
   const getNextDifficulty = useCallback(() => {
@@ -307,14 +309,18 @@ export default function LEETMap() {
     }));
   }, [answeredSet]);
 
-  const handleGenerateAI = useCallback(async () => {
+  const handleGenerateAI = useCallback(async (tabOverride) => {
+    const tab = tabOverride || quizTab;
     setIsGenerating(true);
     setGenError(null);
     try {
       const difficulty = getNextDifficulty();
-      const newQ = await generateQuestion(quizTab, difficulty);
-      setQuestions(prev => ({ ...prev, [quizTab]: [...prev[quizTab], newQ] }));
-      setQuizIdx(prev => ({ ...prev, [quizTab]: prev[quizTab] })); // stay, next click advances
+      const newQ = await generateQuestion(tab, difficulty);
+      setQuestions(prev => {
+        const updated = [...prev[tab], newQ];
+        setQuizIdx(p => ({ ...p, [tab]: updated.length - 1 }));
+        return { ...prev, [tab]: updated };
+      });
     } catch (e) {
       setGenError("AI 생성 실패: " + (e.message || "다시 시도해주세요"));
     } finally {
@@ -522,6 +528,14 @@ export default function LEETMap() {
             )}
 
             <div style={{ flex: 1, overflowY: "auto", padding: 26 }}>
+              {curQList.length === 0 ? (
+                <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+                  <div style={{ fontSize: 48, animation: "spin 1.5s linear infinite" }}>⟳</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: quizColor }}>AI가 문제를 생성하고 있어요...</div>
+                  <div style={{ fontSize: 13, color: "#475569" }}>잠깐만 기다려주세요 😊</div>
+                  <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+                </div>
+              ) : (
               <QuizCard
                 key={`${quizTab}-${curQIdx}`}
                 q={curQList[curQIdx]}
@@ -534,6 +548,7 @@ export default function LEETMap() {
                 onPrev={() => setQuizIdx(p => ({ ...p, [quizTab]: Math.max(p[quizTab] - 1, 0) }))}
                 onNewAI={handleGenerateAI}
               />
+              )}
             </div>
           </div>
         )}
