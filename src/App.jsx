@@ -142,8 +142,15 @@ async function generateQuestion(tab, difficulty) {
   });
   const data = await response.json();
   const text = data.content?.map(b => b.text || "").join("") || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  const clean = text.replace(/```json\n?/g, "").replace(/```/g, "").trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch(e) {
+    const match = clean.match(/\{[\s\S]*\}/);
+    if (match) parsed = JSON.parse(match[0]);
+    else throw new Error("응답 파싱 실패: " + clean.slice(0, 100));
+  }
   return { ...parsed, id: `ai_${Date.now()}`, isAI: true };
 }
 
