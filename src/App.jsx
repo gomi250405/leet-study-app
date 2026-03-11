@@ -48,25 +48,34 @@ const PROMPTS = {
 
 async function generateQuestion(tab, difficulty) {
   const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("API 키가 설정되지 않았습니다.");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: PROMPTS[tab](difficulty) }]
-    })
-  });
+  if (!apiKey) throw new Error("API 키 없음: REACT_APP_ANTHROPIC_API_KEY 미설정");
+  let res;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: PROMPTS[tab](difficulty) }]
+      })
+    });
+  } catch(fetchErr) {
+    throw new Error("네트워크 오류: " + fetchErr.message);
+  }
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error("API 오류 " + res.status + ": " + errText.slice(0, 300));
+  }
   const data = await res.json();
   const text = (data.content || []).map(b => b.text || "").join("").trim();
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("응답에서 JSON을 찾을 수 없습니다.");
+  if (!match) throw new Error("JSON 없음. 응답: " + text.slice(0, 200));
   const parsed = JSON.parse(match[0]);
   return { ...parsed, id: `ai_${Date.now()}`, isAI: true };
 }
