@@ -22,68 +22,46 @@ export default function LEETUltimateApp() {
   const [revealed, setRevealed] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
 
-  // --- 모델 리스트 (에러 나면 순차적으로 시도) ---
-  const MODEL_LIST = [
-    "claude-3-haiku-20240307",
-    "claude-3-5-sonnet-20240620",
-    "claude-3-5-haiku-latest"
-  ];
-
   const handleGenerateAI = async () => {
     setIsGenerating(true);
     setSelected(null);
     setRevealed(false);
     
-    let lastError = "";
+    try {
+      // Vercel Serverless Function(/api/generate)을 호출하도록 설정
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // ⚠️ 하이크 대신 가장 확실한 소네트 모델로 변경
+          model: "claude-3-5-sonnet-20240620", 
+          max_tokens: 1500,
+          messages: [{ role: "user", content: PROMPTS[quizTab](4) }]
+        })
+      });
 
-    // 모델 리스트를 순회하며 하나라도 걸리게 만듦
-    for (const modelName of MODEL_LIST) {
-      try {
-        const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true"
-          },
-          body: JSON.stringify({
-            model: modelName,
-            max_tokens: 1500,
-            messages: [{ role: "user", content: PROMPTS[quizTab](4) }]
-          })
-        });
-
-        if (!response.ok) {
-          const errBody = await response.json();
-          lastError = errBody.error?.message || "Fail";
-          continue; // 다음 모델로 시도
-        }
-
-        const data = await response.json();
-        const contentText = data?.content?.[0]?.text;
-        const start = contentText.indexOf('{');
-        const end = contentText.lastIndexOf('}') + 1;
-        const parsed = JSON.parse(contentText.substring(start, end));
-
-        setQuestions(prev => {
-          const updated = [...prev[quizTab], { ...parsed, id: Date.now() }];
-          setQuizIdx(p => ({ ...p, [quizTab]: updated.length - 1 }));
-          return { ...prev, [quizTab]: updated };
-        });
-        
-        setIsGenerating(false);
-        return; // 성공 시 함수 종료
-
-      } catch (err) {
-        lastError = err.message;
-        continue;
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || "응답 실패");
       }
-    }
 
-    alert(`모든 모델 호출 실패. 마지막 에러: ${lastError}\n\nTIP: Anthropic Workbench에서 사용 가능한 모델명을 확인해보세요.`);
-    setIsGenerating(false);
+      const data = await response.json();
+      const contentText = data?.content?.[0]?.text;
+      
+      const start = contentText.indexOf('{');
+      const end = contentText.lastIndexOf('}') + 1;
+      const parsed = JSON.parse(contentText.substring(start, end));
+
+      setQuestions(prev => {
+        const updated = [...prev[quizTab], { ...parsed, id: Date.now() }];
+        setQuizIdx(p => ({ ...p, [quizTab]: updated.length - 1 }));
+        return { ...prev, [quizTab]: updated };
+      });
+    } catch (err) {
+      alert("생성 실패: " + err.message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const currentQ = questions[quizTab][quizIdx[quizTab]];
@@ -127,7 +105,7 @@ export default function LEETUltimateApp() {
         )}
         <button onClick={handleGenerateAI} disabled={isGenerating}
           style={{ width: "100%", padding: "14px", marginTop: "20px", background: "transparent", color: isGenerating ? "#334155" : activeColor, border: `1px solid ${activeColor}`, borderRadius: "10px", cursor: "pointer", fontWeight: "bold" }}>
-          {isGenerating ? "모델 순차 시도 중..." : "✨ AI 새 문제 생성"}
+          {isGenerating ? "소네트 엔진 가동 중..." : "✨ AI 새 문제 생성"}
         </button>
       </div>
     </div>
